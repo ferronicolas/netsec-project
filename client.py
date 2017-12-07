@@ -2,7 +2,6 @@ import socket
 import threading
 import json
 from errno import ENOENT
-
 from file_handler import read_file
 from excep import InvalidIPAddressError, InvalidPortError
 
@@ -21,13 +20,14 @@ ILLEGAL_MESSAGE_RESPONSE = "illegal"
 
 # Exception messages
 INVALID_IP_EXCEPTION = "The IP address of the server is invalid"
-INVALID_PORT = "The port number of the server is invalid"
+INVALID_PORT_EXCEPTION = "The port number of the server is invalid"
 SERVER_DOWN = "The server is down"
 FILE_DOESNT_EXIST = "The server hasn't created the configuration file yet"
 
 # Global constants
-ENTER_USERNAME = "Enter your username: \n"
-ENTER_PASSWORD = "Enter your password: \n"
+ENTER_USERNAME = "Enter your username: "
+ENTER_PASSWORD = "Enter your password: "
+BUFFER_SIZE = 1024
 
 # Global variables
 client_socket = None
@@ -52,6 +52,12 @@ def start_client():
                 start_socket_thread()
         else:
             print SERVER_DOWN
+    except InvalidIPAddressError as error:
+        print error.message
+        exit(1)
+    except InvalidPortError as error:
+        print error.message
+        exit(1)
     except IOError, e:
         if e.errno == ENOENT:  # File doesn't exist - print custom message
             print FILE_DOESNT_EXIST
@@ -59,16 +65,10 @@ def start_client():
         else:
             print e.strerror
             exit(1)
-    except InvalidIPAddressError:
-        print INVALID_IP_EXCEPTION
-        exit(1)
-    except InvalidPortError:
-        print INVALID_PORT
-        exit(1)
 
 
 def check_if_server_up():
-    return True  # TODO: Check if server is up and running
+    return True
 
 
 # Checks if IP supplied is a valid IPv4
@@ -82,7 +82,7 @@ def check_if_ipv4(ip):
                 check_if_valid_ip_number(number)
             return ip
         else:
-            raise InvalidIPAddressError()
+            raise InvalidIPAddressError(INVALID_IP_EXCEPTION)
 
 
 # Checks if number is between 0 and 255
@@ -90,11 +90,11 @@ def check_if_valid_ip_number(number):
     try:
         number = int(number)
         if number < 0 or number > 255:
-            raise InvalidIPAddressError()
+            raise InvalidIPAddressError(INVALID_IP_EXCEPTION)
         else:
             return number
     except ValueError:
-        raise InvalidIPAddressError()
+        raise InvalidIPAddressError(INVALID_IP_EXCEPTION)
 
 
 # Checks if number is positive
@@ -102,10 +102,10 @@ def check_if_valid_port(input_number):
     try:
         number = int(input_number)
         if number <= 0:
-            raise InvalidPortError()
+            raise InvalidPortError(INVALID_PORT_EXCEPTION)
         return number
     except ValueError:
-        raise InvalidPortError()
+        raise InvalidPortError(INVALID_PORT_EXCEPTION)
 
 
 def start_socket_thread():
@@ -122,7 +122,7 @@ def listen_on_port():
     # Sends sign_in message to server
     client_socket.sendto(make_sign_in_message(), (server_ip, server_port))
     while True:
-        data, address = client_socket.recvfrom(1024)  # Buffer size = 1024 bytes
+        data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
         data_split = data.split()
         if data_split[0] == LIST_RESPONSE_MESSAGE:
             print ' '.join(data_split[1:])

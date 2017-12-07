@@ -22,7 +22,7 @@ def read_file():
     for line in file:
         array = line.split(DELIMITER)
         if array[0] == IP:
-            result_ip = array[1].strip(" \t\n\r")
+            result_ip = array[1].strip(" \t\n\r")  # Trim
         elif array[0] == PORT:
-            result_port = array[1].strip(" \t\n\r")
+            result_port = array[1].strip(" \t\n\r")  # Trim
     return result_ip, result_port

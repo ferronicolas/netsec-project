@@ -9,12 +9,15 @@ class InvalidIPAddressError(Error):
     """
         Raised when the IP is invalid
     """
-    pass
+    def __init__(self, message):
+        self.message = message
 
 
 class InvalidPortError(Error):
     """
         Raised when the port is invalid
     """
-    pass
+
+    def __init__(self, message):
+        self.message = message
 

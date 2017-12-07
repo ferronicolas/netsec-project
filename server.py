@@ -52,9 +52,14 @@ def check_if_positive(input_number):
 
 # Gets IP address of current host
 def get_ip_address():
-    interface = 'en0'
-    ni.ifaddresses(interface)
-    return ni.ifaddresses(interface)[ni.AF_INET][0]["addr"]
+    interface = 'eth0'  # Windows
+    try:
+        ni.ifaddresses(interface)
+        return ni.ifaddresses(interface)[ni.AF_INET][0]["addr"]
+    except ValueError:
+        interface = 'en0'  # Unix-like systems
+        ni.ifaddresses(interface)
+        return ni.ifaddresses(interface)[ni.AF_INET][0]["addr"]
 
 
 # Establishes UDP socket
