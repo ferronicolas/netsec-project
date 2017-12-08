@@ -1,10 +1,5 @@
-import socket
-import threading
-import json
-import PoW
-import os
-import Diffie_hellman
-import binascii
+import socket,threading,json,os,binascii
+import PoW,Diffie_hellman
 from errno import ENOENT
 from file_handler import read_server_file
 from excep import InvalidIPAddressError, InvalidPortError
@@ -37,7 +32,7 @@ BUFFER_SIZE = 1024
 client_socket = None
 threads = []
 my_username = ""
-my_password = "" #can we store this
+my_password = "" # can we store this###############################################################'''''''''#''ds'12er'fg'3rfg'dsb'r'fgsd'gf'g'rfgs'rf'sg'fg'gfs'g'f''
 server_ip = 0
 server_port = 0
 current_message = ""  # Message that I want to send
@@ -137,22 +132,21 @@ def listen_on_port():
     r1 = r1_hash[0]
     hash = r1_hash[1]
     a = PoW.compute_r2(r1,hash)
-    client,client_pubkey = Diffie_hellman.client_contribution()
+    client,client_contribution = Diffie_hellman.client_contribution()
 
     user = str(my_username)
     psw = str(my_password)
     r1 = str(binascii.hexlify(os.urandom(16)))
-    c_key = str(client_pubkey)
-    print c_key
-    packet = user + ',' + psw + ',' + r1  + ',' + c_key
+    client_contribution = str(client_contribution)
+    print client_contribution
+    packet = user + ',' + psw + ',' + r1  + ',' + client_contribution
 
     client_socket.sendto('puzzle ' + a + " " + packet, (server_ip, server_port))
     data,address = client_socket.recvfrom(BUFFER_SIZE)
-    r1_answer, server_pubkey = data.split(',')
+    r1_answer, server_contribution = data.split(',')
     if r1 == r1_answer:
-        print 'checksout'
-    shared_key = Diffie_hellman.process_server_contribution(client,int(server_pubkey))
-    print 'shared_key:',shared_key
+        shared_key = Diffie_hellman.process_server_contribution(client,int(server_contribution))
+        print 'shared_key:',shared_key
 
 
 

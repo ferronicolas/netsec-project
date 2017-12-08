@@ -4,27 +4,33 @@ import  pyDH
 All public keys are 2048 bit.
 """
 
-def process_server_contribution(client,server_pubkey):
+
+def process_server_contribution(client, servers_contribution):
     """
     Makes shared key for client
     :param client: DH-object
-    :param server_pubkey
+    :param servers_contribution
     :return: shared_key
     """
-    shared_key = client.gen_shared_key(server_pubkey)
+    shared_key = client.gen_shared_key(servers_contribution)
+    print shared_key
+    print 'keylength: ',len(shared_key)
+    print len(bytearray.fromhex(str(shared_key)))
     return shared_key
 
-def server_contribution(client_pubkey):
+
+def server_contribution(clients_contribution):
     """
-    Makes DH-object for server to generate shared key (given client_pubkey)
-    :param client_pubkey
+    Makes DH-object for server to generate shared key (given client_contribution)
+    :param clients_contribution
     :return: shared key (for server)
-    :return: server_pubkey (for client)
+    :return: server_contribution (for client)
     """
     server = pyDH.DiffieHellman()
-    server_pubkey = server.gen_public_key()
-    shared_key = server.gen_shared_key(client_pubkey)
-    return shared_key,server_pubkey
+    server_contribution = server.gen_public_key()
+    shared_key = server.gen_shared_key(clients_contribution)
+    return shared_key,server_contribution
+
 
 def client_contribution():
     """
@@ -33,6 +39,7 @@ def client_contribution():
     :return: client_pubkey (for server)
     """
     client = pyDH.DiffieHellman()
-    client_pubkey = client.gen_public_key()
-    return client,client_pubkey
+    client_contribution = client.gen_public_key()
+    return client, client_contribution
+
 
