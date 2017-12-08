@@ -3,6 +3,7 @@ import PoW, incoming_control, Diffie_hellman, saltpassword, userdatabase, check_
 from file_handler import create_server_file
 import netifaces as ni
 from time_handler import get_expiration_of_puzzle, is_timestamp_valid
+from asymmetric_encryption import decrypt_message
 
 # Flags
 PORT_FLAG = "-sp"
@@ -14,14 +15,14 @@ LIST_RESPONSE_MESSAGE = "list_response"
 GET_ADDRESS_OF_USER = "get_address_of_user"
 GET_ADDRESS_OF_USER_RESPONSE = "get_address_of_user_response"
 ILLEGAL_MESSAGE_RESPONSE = "illegal"
-PUZZLE_RESPONSE = 'puzzle'
+PUZZLE_MESSAGE = 'puzzle'
+INCORRECT_USER_PASS_MESSAGE = "incorrect_user_pass"
 
 # Error messages
 ERROR_MUST_ENTER_POSITIVE = "You must enter a positive number"
 
 # Global constants
 BUFFER_SIZE = 1024
-PUBLIC_KEY_FULL_PATH = "public_key_4096.der"
 PRIVATE_KEY_FULL_PATH = "private_key_4096.der"
 
 # Global variables
@@ -85,7 +86,7 @@ def listen_on_port(port):
             if len(message) > 0:
                 if message[0] == SIGN_IN_MESSAGE:
                     handle_sign_in(address)
-                elif message[0] == PUZZLE_RESPONSE:
+                elif message[0] == PUZZLE_MESSAGE:
                     handle_puzzle_response(message, address)
                 else:
                     if (address in ip_port_association) and ip_port_association[address][0] == True and \
@@ -93,6 +94,8 @@ def listen_on_port(port):
                         decrypted_message = symmetric_encryption.decrypt(ip_port_association[address][1], message)
 
                         split_decrypted_message = decrypted_message.split()
+
+                        print split_decrypted_message
 
                         # Check if message is a list
                         if len(split_decrypted_message) == 3 and split_decrypted_message[0] == LIST_MESSAGE:
@@ -107,8 +110,12 @@ def listen_on_port(port):
                                     print "Timestamp invalid DEBUG"
                             except Exception, exc:
                                 print exc
+                        else:
+                            server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command",
+                                                 address)
                     else:
-                        print "GETS HERER!!! DEBUG"
+                        server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command",
+                                             address)
             else:
                 server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
                 # elif message[0] == LIST_MESSAGE:
@@ -142,12 +149,18 @@ def handle_sign_in(address):
 
 
 def handle_puzzle_response(message, address):
-    if len(message) == 3 and (address in ip_port_association) \
-        and ip_port_association[address][0] == False and ip_port_association[address][1] == message[1]: # Puzzle valid
-        payload = message[2].split(',')
+    if len(message) == 3 and (address in ip_port_association) and ip_port_association[address][0] == False \
+            and ip_port_association[address][1] == message[1]:  # Puzzle valid
+        print "ENCRYTPED MESSAGE: " + message
+        message_decrypted = decrypt_message(PRIVATE_KEY_FULL_PATH, message[2])
+        print "DECRYPTED MESSAGE: " + message_decrypted
+        payload = message_decrypted.split(',')
         if len(payload) == 4:
             username, password, random_number, df_contribution = payload
-            if saltpassword.check(userdatabase.get_salt_user(username), password, userdatabase.get_hash_user(username)):
+
+            # Check if username in db
+            if userdatabase.is_user_registered(username) and saltpassword.check(userdatabase.get_salt_user(username), password,
+                        userdatabase.get_hash_user(username)):
                 shared_key, server_contribution = Diffie_hellman.server_contribution(int(df_contribution))
 
                 shared_key = shared_key.decode("hex")
@@ -155,6 +168,8 @@ def handle_puzzle_response(message, address):
                 ip_port_association[address] = [True, shared_key]
 
                 server_socket.sendto(str(random_number) + ',' + str(server_contribution), address)
+            else:
+                server_socket.sendto(make_invalid_user_password_response(), address)
 
 
 def control_incoming_request():
@@ -184,6 +199,10 @@ def make_get_address_of_user_response(username):
         return GET_ADDRESS_OF_USER_RESPONSE + ' {"ip":"' + ip + '", "port":' + str(port) + '}'
     else:
         return ILLEGAL_MESSAGE_RESPONSE + " The username " + username + " doesn't exist"
+
+
+def make_invalid_user_password_response():
+    return INCORRECT_USER_PASS_MESSAGE + " User/Password combination incorrect"
 
 
 if __name__ == "__main__":

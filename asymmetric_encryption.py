@@ -2,6 +2,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import padding, utils
 from cryptography.exceptions import InvalidSignature
+import base64
 
 # Global constants
 INVALID_SIGNATURE = "Invalid signature"
@@ -79,15 +80,15 @@ def verify_signature(public_key_filename, signature, message_to_verify_signature
         print ERROR_WHEN_VERIFYING_SIGNATURE
         return False
 
-
-# MESSAGE = "kalsnf"
-#
-# if __name__ == "__main__":
-#     cipher = encrypt_message(PUBLIC_KEY_FULL_PATH, message_to_encrypt)
-#     message = decrypt_message(PRIVATE_KEY_FULL_PATH, cipher)
-#     print message
-#     print "Identical: " + str(message == message_to_encrypt)
-#     signature = sign_message("private_key_4096.der", MESSAGE)
-#     result = verify_signature("public_key_4096.der", signature, MESSAGE)
-#     print result
+MESSAGE = "akansflkansklfnasklnflkasnfklanskflasnklfnalknskklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasn"
+# 446 MAX PERMITTED
+if __name__ == "__main__":
+    cipher = encrypt_message("public_key_4096.der", MESSAGE)
+    message = decrypt_message("private_key_4096.der", cipher)
+    print message
+    print len(message)
+    print "Identical: " + str(message == MESSAGE)
+    # signature = sign_message("private_key_4096.der", MESSAGE)
+    # result = verify_signature("public_key_4096.der", signature, MESSAGE)
+    # print result
 

@@ -8,7 +8,7 @@ def compute(password):
     :return: salt and hash value
     """
     salt = str(binascii.hexlify(os.urandom(4)))
-    return salt,hashlib.sha512(salt + binascii.hexlify(password)).hexdigest()
+    return salt, hashlib.sha512(salt + binascii.hexlify(password)).hexdigest()
 
 
 def check(salt, password, has):
