@@ -2,3 +2,5 @@
 .idea/
 *.pyc
 configuration_file.txt
+private_key_*
+public_key_*
