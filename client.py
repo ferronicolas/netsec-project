@@ -1,4 +1,4 @@
-import socket, threading, json, os, binascii, getpass
+import socket, threading, json, os, binascii, getpass, base64
 import PoW, Diffie_hellman, symmetric_encryption
 from errno import ENOENT
 from file_handler import read_server_file
@@ -39,7 +39,7 @@ PASSWORD_CANT_BE_BLANK = "Password can't be blank. Enter it again: "
 DO_YOU_WANNA_TRY_AGAIN = "Do you wanna try again? (Y/N) "
 SHARED_KEY_COULDNT_BE_ESTABLISHED = "Shared key couldn't be established"
 BUFFER_SIZE = 1024
-SERVER_PUBLIC_KEY_FULL_PATH = "public_key_4096.der"
+SERVER_PUBLIC_KEY_FULL_PATH = "public_key_8192.der"
 
 # Global variables
 client_socket = None
@@ -51,7 +51,7 @@ current_message = ""  # Message that I want to send
 shared_key = 0
 shared_key_set = False
 list_random_number = 0
-
+puzzle_random_number = 0
 
 
 def start_client():
@@ -149,10 +149,12 @@ def listen_on_port():
         global my_username
         my_username, my_password = enter_username_password()
 
-        random_number = str(binascii.hexlify(os.urandom(16)))  # Generate random number for
+        puzzle_random_number = binascii.hexlify(os.urandom(16))  # Generate random number
         c_key = str(client_pubkey)
 
-        client_socket.sendto(make_puzzle_message(r2, my_username, my_password, random_number, c_key), (server_ip, server_port))
+        message_to_send = make_puzzle_message(r2, my_username, my_password, puzzle_random_number, c_key)
+        print message_to_send
+        client_socket.sendto(message_to_send, (server_ip, server_port))
         data, address = client_socket.recvfrom(BUFFER_SIZE)
 
         response_split = data.split()
@@ -168,7 +170,7 @@ def listen_on_port():
         response = data.split(',')
         if len(response) == 2:
             random_answer, server_contribution = response
-            if random_number == random_answer:
+            if puzzle_random_number == random_answer:
                 global shared_key
                 shared_key = Diffie_hellman.process_server_contribution(client, int(server_contribution))
                 print 'shared_key:', shared_key

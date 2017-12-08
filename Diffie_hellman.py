@@ -39,6 +39,5 @@ def client_contribution():
     :return: client_pubkey (for server)
     """
     client = pyDH.DiffieHellman()
-    print client.get_private_key()
     client_contribution = client.gen_public_key()
     return client, client_contribution

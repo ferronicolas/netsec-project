@@ -1,4 +1,4 @@
-import socket, argparse, math, threading, os
+import socket, argparse, math, threading, os, base64
 import PoW, incoming_control, Diffie_hellman, saltpassword, userdatabase, check_data_format, symmetric_encryption
 from file_handler import create_server_file
 import netifaces as ni
@@ -24,7 +24,7 @@ ERROR_MUST_ENTER_POSITIVE = "You must enter a positive number"
 
 # Global constants
 BUFFER_SIZE = 1024
-PRIVATE_KEY_FULL_PATH = "private_key_4096.der"
+PRIVATE_KEY_FULL_PATH = "private_key_8192.der"
 
 # Global variables
 current_users = {}
@@ -84,12 +84,11 @@ def listen_on_port(port):
         while True:
             data, address = server_socket.recvfrom(BUFFER_SIZE)
             message = data.split()
-            print message
             if len(message) > 0:
                 if message[0] == SIGN_IN_MESSAGE:
                     handle_sign_in(address)
                 elif message[0] == PUZZLE_MESSAGE:
-                    handle_puzzle_response(message, address)
+                    handle_puzzle_response(data, message, address)
                 elif (address in ip_port_association) and ip_port_association[address][0] and len(message) == 4:
                     # Thus message is encrypted with symmetric key (-> decrypting is a cheap operation )
                     handle_symmetric_encrypted_data(address, message)
@@ -99,8 +98,10 @@ def listen_on_port(port):
                 server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
     except socket.error, exc:  # If address is already in use it will throw this exception
         print exc.strerror
+        exit(1)
     except Exception, exc:
         print exc
+        exit(1)
 
 
 def init_socket(port):
@@ -121,11 +122,13 @@ def handle_sign_in(address):
     server_socket.sendto(str(r1) + ',' + str(hash_value), address)
 
 
-def handle_puzzle_response(message, address):
-    if len(message) == 3 and (address in ip_port_association) and ip_port_association[address][0] == False \
+def handle_puzzle_response(data, message, address):
+    if len(message) > 2 and (address in ip_port_association) and ip_port_association[address][0] == False \
             and ip_port_association[address][1] == message[1]:  # Puzzle valid
-        print "ENCRYTPED MESSAGE: " + message
-        message_decrypted = decrypt_message(PRIVATE_KEY_FULL_PATH, message[2])
+        message_to_decrypt = data.split(message[0] + " " + message[1] + " ", 1)[1]
+        print message_to_decrypt
+        print "ENCRYTPED MESSAGE: " + message_to_decrypt
+        message_decrypted = decrypt_message(PRIVATE_KEY_FULL_PATH, message_to_decrypt)
         print "DECRYPTED MESSAGE: " + message_decrypted
         payload = message_decrypted.split(',')
         if len(payload) == 4:
@@ -165,7 +168,7 @@ def handle_list_message(split_decrypted_message, address):
     try:
         timestamp = float(split_decrypted_message[2])
         if is_timestamp_valid(timestamp):
-            server_socket.sendto(make_current_users_message(ip_port_association[address][1], list_random_number),address)
+            server_socket.sendto(make_current_users_message(ip_port_association[address][1], list_random_number), address)
         else:
             print "Timestamp invalid DEBUG"
     except Exception, exc:

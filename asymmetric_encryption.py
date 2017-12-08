@@ -37,11 +37,13 @@ def get_private_key(private_key_filename):
 def encrypt_message(public_key_filename, message):
     public_key = get_public_key(public_key_filename)
     ciphertext = public_key.encrypt(message, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
+    base64.b64encode(ciphertext)
     return ciphertext
 
 
 # Decrypts message with private key
 def decrypt_message(private_key_filename, ciphertext):
+    base64.b64decode(ciphertext)
     private_key = get_private_key(private_key_filename)
     message = private_key.decrypt(ciphertext, padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()), algorithm=hashes.SHA256(), label=None))
     return message
@@ -80,11 +82,11 @@ def verify_signature(public_key_filename, signature, message_to_verify_signature
         print ERROR_WHEN_VERIFYING_SIGNATURE
         return False
 
-MESSAGE = "akansflkansklfnasklnflkasnfklanskflasnklfnalknskklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasn"
+MESSAGE = "asfklansflkanslkasklfnaslkssakfnlsaknflasflkansaksnfasnfklanfslkasnlkfnaakansflkansaksnfasnfklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasflkasnfklanskflasakansflkansaksnfasnfklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasakansflkansaksnfasnfklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasakansflkansaksnfasnfklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasakansflkansaksnfasnfakansflkansaksnfasnfklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasakansflkansaksnfasnfklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasakansflkansaksnfasnfklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasklanfslkasnlkfnasklanlknklfnasklnflkasnfklanskflasnklfnalknskklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasnaklsnfklasn"
 # 446 MAX PERMITTED
 if __name__ == "__main__":
-    cipher = encrypt_message("public_key_4096.der", MESSAGE)
-    message = decrypt_message("private_key_4096.der", cipher)
+    cipher = encrypt_message("public_key_8192.der", MESSAGE)
+    message = decrypt_message("private_key_8192.der", cipher)
     print message
     print len(message)
     print "Identical: " + str(message == MESSAGE)
