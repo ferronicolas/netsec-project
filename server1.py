@@ -1,10 +1,6 @@
-import socket
-import argparse
-import PoW
-import math
-import do_proof_o_work
-import incoming_control
+import socket, argparse, PoW, math, incoming_control, threading, Diffie_hellman
 from file_handler import create_file
+import sched, time
 import netifaces as ni
 
 # Flags
@@ -27,10 +23,14 @@ BUFFER_SIZE = 1024
 # Global variables
 current_users = {}
 server_socket = None
+pow_length = 3
 
 # Hardcoded values
-server_private_key = "path/to/private/key"
-server_public_key = "path/to/public/key"
+#server_private_key = "path/to/private/key"
+#server_public_key = "path/to/public/key"
+
+#threads
+threads = []
 
 
 def start_server():
@@ -78,29 +78,61 @@ def listen_on_port(port):
         server_socket.bind(('', port))
         create_file(get_ip_address(), port)
         print "Server initialized..."
+        control_incoming_request()
         while True:
             data, address = server_socket.recvfrom(BUFFER_SIZE)
             message = data.split()
+            print message
             if len(message) > 0:
                 if message[0] == SIGN_IN_MESSAGE:
                     current_users[message[1]] = (address[0], address[1])  # USERNAME: (IP address, port)
-                    #The following code is a work around the PoW. Since us.random generates random bytes this creates large
-                    #jumps in computational time. (2 bytes = 1 second, 3 bytes = 30 seconds). By dividing 1000 over m, the
-                    # larger m gets, the smaller 1000/m gets, so the computational jump will be less big.
-                    m = 5
-                    r1,r2,hash_value = PoW.proof_o_work(int(math.floor(1000/m)),m)
-                    r2_computed = do_proof_o_work.compute_r2(r1,hash_value)
-                    print PoW.check_proof_o_work(r1,r2_computed,hash_value)
+                    global pow_length
+                    pow_length = incoming_control.get_pow_length(pow_length)
+                    r1,r2,hash_value = PoW.proof_o_work(pow_length)
+                    print r2
+                    server_socket.sendto(str(r1) + ',' + str(hash_value), address)
+                    print 'finished'
+                    #send r2 to client
+                    #data, address = server_socket.recvfrom(BUFFER_SIZE)
+
                     # get Answer, if correct then process rest of message (username,password,R1,g^a)
                     # send back R1,g^b encrypted with private key (integrity)
                 elif message[0] == LIST_MESSAGE:
                     server_socket.sendto(make_current_users_message(), address)
                 elif message[0] == GET_ADDRESS_OF_USER:
                     server_socket.sendto(make_get_address_of_user_response(message[1]), address)
-                else:
-                    server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
+                elif message[0] == 'puzzle':
+                    print PoW.check_proof_o_work(r1, message[1],hash_value)
+                    if PoW.check_proof_o_work(r1, message[1],hash_value):
+                        username, password, r1, df_contribution = message[2].split(',')
+                        print df_contribution
+                        #check password
+                        #
+                        shared_key, server_pubkey = Diffie_hellman.server_contribution(int(df_contribution))
+                        server_socket.sendto(str(r1) + ',' + str(server_pubkey), address)
+                        print 'shared_key:', shared_key
+
+                    else:
+                        print 'pow failed'
+            else:
+                server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
     except socket.error, exc:  # If address is already in use it will throw this exception
         print exc.strerror
+
+def receive():
+    data, address = server_socket.recvfrom(BUFFER_SIZE)
+    return data, address
+
+
+
+def control_incoming_request ():
+    """
+    Function that resets the counter in the 'incoming_control.py' module.
+    :return:
+    """
+    threading.Timer(30, control_incoming_request).start ()
+    incoming_control.reset()
+
 
 
 def make_current_users_message():

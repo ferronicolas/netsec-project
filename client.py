@@ -1,6 +1,10 @@
 import socket
 import threading
 import json
+import PoW
+import os
+import Diffie_hellman
+import binascii
 from errno import ENOENT
 from file_handler import read_file
 from excep import InvalidIPAddressError, InvalidPortError
@@ -33,13 +37,14 @@ BUFFER_SIZE = 1024
 client_socket = None
 threads = []
 my_username = ""
+my_password = "" #can we store this
 server_ip = 0
 server_port = 0
 current_message = ""  # Message that I want to send
 
 
 def start_client():
-    global my_username, server_ip, server_port
+    global my_username, server_ip, server_port, my_password
     try:
         server_ip, server_port = read_file()
         server_ip = check_if_ipv4(server_ip)
@@ -121,6 +126,43 @@ def listen_on_port():
 
     # Sends sign_in message to server
     client_socket.sendto(make_sign_in_message(), (server_ip, server_port))
+
+
+
+
+
+
+    data,address = client_socket.recvfrom(BUFFER_SIZE)
+    r1_hash = data.split(',')
+    r1 = r1_hash[0]
+    hash = r1_hash[1]
+    a = PoW.compute_r2(r1,hash)
+    client,client_pubkey = Diffie_hellman.client_contribution()
+
+    user = str(my_username)
+    psw = str(my_password)
+    r1 = str(binascii.hexlify(os.urandom(16)))
+    c_key = str(client_pubkey)
+    print c_key
+    packet = user + ',' + psw + ',' + r1  + ',' + c_key
+
+    client_socket.sendto('puzzle ' + a + " " + packet, (server_ip, server_port))
+    data,address = client_socket.recvfrom(BUFFER_SIZE)
+    r1_answer, server_pubkey = data.split(',')
+    if r1 == r1_answer:
+        print 'checksout'
+    shared_key = Diffie_hellman.process_server_contribution(client,int(server_pubkey))
+    print 'shared_key:',shared_key
+
+
+
+
+
+
+
+
+
+
     while True:
         data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
         data_split = data.split()
@@ -151,6 +193,7 @@ def input_handling():
     print "You can chat now:"
     while True:
         message = raw_input()
+        print 'message',message
         split_message = message.split()
         if len(split_message) > 0 and split_message[0] == "send":
             if len(split_message) > 2:
