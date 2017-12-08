@@ -21,7 +21,7 @@ larger m gets, the smaller 1000/m gets, so the computational jump will be less b
     return r1, r2, hashlib.sha512(str(r1) + str(r2)).hexdigest()
 
 
-def check_proof_o_work(r1,r2,hash_value):
+def check_proof_o_work(r1, r2, hash_value):
     """
     checks if sha512(r1|r2) == hash_value
     :param r1: random number 1

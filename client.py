@@ -1,13 +1,8 @@
-import socket
-import threading
-import json
-import PoW
-import os
-import Diffie_hellman
-import binascii
+import socket, threading, json, PoW, os, Diffie_hellman, binascii, symmetric_encryption
 from errno import ENOENT
 from file_handler import read_server_file
 from excep import InvalidIPAddressError, InvalidPortError
+from time_handler import get_current_timestamp
 
 # Flags
 USER_FLAG = "-u"
@@ -19,8 +14,10 @@ SIGN_IN_MESSAGE = "sign_in"
 LIST_MESSAGE = "list"
 LIST_RESPONSE_MESSAGE = "list_response"
 GET_ADDRESS_OF_USER = "get_address_of_user"
+PUZZLE_RESPONSE = 'puzzle'
 GET_ADDRESS_OF_USER_RESPONSE = "get_address_of_user_response"
 ILLEGAL_MESSAGE_RESPONSE = "illegal"
+SEND = "send"
 
 # Exception messages
 INVALID_IP_EXCEPTION = "The IP address of the server is invalid"
@@ -37,10 +34,13 @@ BUFFER_SIZE = 1024
 client_socket = None
 threads = []
 my_username = ""
-my_password = "" #can we store this
+my_password = ""
 server_ip = 0
 server_port = 0
 current_message = ""  # Message that I want to send
+shared_key = 0
+shared_key_set = False
+list_random_number = 0
 
 
 def start_client():
@@ -132,29 +132,32 @@ def listen_on_port():
 
 
 
-    data,address = client_socket.recvfrom(BUFFER_SIZE)
+    data, address = client_socket.recvfrom(BUFFER_SIZE)
     r1_hash = data.split(',')
     r1 = r1_hash[0]
     hash = r1_hash[1]
-    a = PoW.compute_r2(r1,hash)
-    client,client_pubkey = Diffie_hellman.client_contribution()
+    r2 = PoW.compute_r2(r1, hash)
+    client, client_pubkey = Diffie_hellman.client_contribution()
 
     user = str(my_username)
-    psw = str(my_password)
-    r1 = str(binascii.hexlify(os.urandom(16)))
+    password = str(my_password)
+    random_number = str(binascii.hexlify(os.urandom(16)))
     c_key = str(client_pubkey)
-    print c_key
-    packet = user + ',' + psw + ',' + r1  + ',' + c_key
+    # print c_key
+    # packet = user + ',' + psw + ',' + r1 + ',' + c_key
 
-    client_socket.sendto('puzzle ' + a + " " + packet, (server_ip, server_port))
-    data,address = client_socket.recvfrom(BUFFER_SIZE)
+    client_socket.sendto(make_puzzle_message(r2, user, password, random_number, c_key), (server_ip, server_port))
+    data, address = client_socket.recvfrom(BUFFER_SIZE)
     r1_answer, server_pubkey = data.split(',')
     if r1 == r1_answer:
         print 'checksout'
-    shared_key = Diffie_hellman.process_server_contribution(client,int(server_pubkey))
-    print 'shared_key:',shared_key
+    global shared_key
+    shared_key = Diffie_hellman.process_server_contribution(client, int(server_pubkey))
+    print 'shared_key:', shared_key
+    shared_key = shared_key.decode("hex")
 
-
+    global shared_key_set
+    shared_key_set = True
 
 
 
@@ -166,20 +169,25 @@ def listen_on_port():
     while True:
         data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
         data_split = data.split()
-        if data_split[0] == LIST_RESPONSE_MESSAGE:
-            print ' '.join(data_split[1:])
-        elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
-            json_response = json.loads(''.join(data_split[1:]))
-            client_socket.sendto(my_username + " " + current_message, (json_response["ip"], json_response["port"]))
-        elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
-            print ' '.join(data_split[1:])
+        if shared_key_set and len(data_split) == 4:
+            # if data_split[0] == LIST_RESPONSE_MESSAGE:
+            #     print ' '.join(data_split[1:])
+            decrypted_message = symmetric_encryption.decrypt(shared_key, data_split)
+            split_decrypted_message = decrypted_message.split()
+            if len(split_decrypted_message) > 2 and split_decrypted_message[0] == LIST_RESPONSE_MESSAGE:
+                if list_random_number == split_decrypted_message[1]:  # Valid response!
+                    print ' '.join(split_decrypted_message[2:])
+            elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
+                json_response = json.loads(''.join(data_split[1:]))
+                client_socket.sendto(my_username + " " + current_message, (json_response["ip"], json_response["port"]))
+            elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
+                print ' '.join(data_split[1:])
+            else:
+                print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(data_split[0]) + ">: " \
+                      + ' '.join(data_split[1:])
         else:
-            print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(data_split[0]) + ">: " \
-                  + ' '.join(data_split[1:])
-
-
-def make_sign_in_message():
-    return SIGN_IN_MESSAGE + " " + my_username
+            # TODO: Ask to reconnect
+            print "Uno"
 
 
 def start_input_thread():
@@ -193,17 +201,38 @@ def input_handling():
     print "You can chat now:"
     while True:
         message = raw_input()
-        print 'message',message
         split_message = message.split()
-        if len(split_message) > 0 and split_message[0] == "send":
-            if len(split_message) > 2:
-                global current_message
-                current_message = ' '.join(split_message[2:])
-                client_socket.sendto(GET_ADDRESS_OF_USER + " " + split_message[1], (server_ip, server_port))
+        if len(split_message) > 0:
+            if split_message[0] == SEND:
+                if len(split_message) > 2:
+                    global current_message
+                    current_message = ' '.join(split_message[2:])
+                    client_socket.sendto(GET_ADDRESS_OF_USER + " " + split_message[1], (server_ip, server_port))
+                else:
+                    print "You are not using the command 'send' the proper way"
+            elif split_message[0] == LIST_MESSAGE:
+                client_socket.sendto(make_list_message(), (server_ip, server_port))
             else:
-                print "You are not using the command 'send' the proper way"
+                client_socket.sendto(message, (server_ip, server_port))
         else:
-            client_socket.sendto(message, (server_ip, server_port))
+            print "Incorrect command\n"
+
+
+def make_sign_in_message():
+    return SIGN_IN_MESSAGE + " " + my_username
+
+
+def make_puzzle_message(r2, username, password, random_number, c_key):
+    return PUZZLE_RESPONSE + " " + r2 + " " + username + "," + password + "," + random_number + "," + c_key
+
+
+def make_list_message():
+    global list_random_number
+    list_random_number = binascii.hexlify(os.urandom(16))
+    associated_data = os.urandom(16)
+    message = LIST_MESSAGE + " " + list_random_number + " " + str(get_current_timestamp())
+    message_to_send = symmetric_encryption.encrypt(shared_key, message, associated_data)
+    return message_to_send
 
 
 if __name__ == "__main__":
