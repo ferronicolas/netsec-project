@@ -1,7 +1,8 @@
 import socket, argparse, PoW, math, incoming_control, threading, Diffie_hellman
-from file_handler import create_file
+from file_handler import create_server_file
 import sched, time
 import netifaces as ni
+
 
 # Flags
 PORT_FLAG = "-sp"
@@ -19,6 +20,8 @@ ERROR_MUST_ENTER_POSITIVE = "You must enter a positive number"
 
 # Global constants
 BUFFER_SIZE = 1024
+PUBLIC_KEY_FULL_PATH = "public_key_4096.der"
+PRIVATE_KEY_FULL_PATH = "private_key_4096.der"
 
 # Global variables
 current_users = {}
@@ -31,7 +34,6 @@ pow_length = 3
 
 #threads
 threads = []
-
 
 def start_server():
     port = check_arguments()
@@ -76,7 +78,7 @@ def listen_on_port(port):
         global server_socket
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         server_socket.bind(('', port))
-        create_file(get_ip_address(), port)
+        create_server_file(get_ip_address(), port)
         print "Server initialized..."
         control_incoming_request()
         while True:
@@ -94,9 +96,6 @@ def listen_on_port(port):
                     print 'finished'
                     #send r2 to client
                     #data, address = server_socket.recvfrom(BUFFER_SIZE)
-
-                    # get Answer, if correct then process rest of message (username,password,R1,g^a)
-                    # send back R1,g^b encrypted with private key (integrity)
                 elif message[0] == LIST_MESSAGE:
                     server_socket.sendto(make_current_users_message(), address)
                 elif message[0] == GET_ADDRESS_OF_USER:
@@ -107,7 +106,6 @@ def listen_on_port(port):
                         username, password, r1, df_contribution = message[2].split(',')
                         print df_contribution
                         #check password
-                        #
                         shared_key, server_pubkey = Diffie_hellman.server_contribution(int(df_contribution))
                         server_socket.sendto(str(r1) + ',' + str(server_pubkey), address)
                         print 'shared_key:', shared_key

@@ -6,7 +6,7 @@ import os
 import Diffie_hellman
 import binascii
 from errno import ENOENT
-from file_handler import read_file
+from file_handler import read_server_file
 from excep import InvalidIPAddressError, InvalidPortError
 
 # Flags
@@ -46,7 +46,7 @@ current_message = ""  # Message that I want to send
 def start_client():
     global my_username, server_ip, server_port, my_password
     try:
-        server_ip, server_port = read_file()
+        server_ip, server_port = read_server_file()
         server_ip = check_if_ipv4(server_ip)
         server_port = check_if_valid_port(server_port)
         if check_if_server_up():
