@@ -17,6 +17,7 @@ GET_ADDRESS_OF_USER_RESPONSE = "get_address_of_user_response"
 ILLEGAL_MESSAGE_RESPONSE = "illegal"
 PUZZLE_MESSAGE = 'puzzle'
 INCORRECT_USER_PASS_MESSAGE = "incorrect_user_pass"
+LOGOUT_MESSAGE = 'logout'
 
 # Error messages
 ERROR_MUST_ENTER_POSITIVE = "You must enter a positive number"
@@ -83,47 +84,19 @@ def listen_on_port(port):
         while True:
             data, address = server_socket.recvfrom(BUFFER_SIZE)
             message = data.split()
+            print message
             if len(message) > 0:
                 if message[0] == SIGN_IN_MESSAGE:
                     handle_sign_in(address)
                 elif message[0] == PUZZLE_MESSAGE:
                     handle_puzzle_response(message, address)
+                elif (address in ip_port_association) and ip_port_association[address][0] and len(message) == 4:
+                    # Thus message is encrypted with symmetric key (-> decrypting is a cheap operation )
+                    handle_symmetric_encrypted_data(address, message)
                 else:
-                    if (address in ip_port_association) and ip_port_association[address][0] == True and \
-                            len(message) == 4:  # Message is encrypted and client already set shared key
-                        decrypted_message = symmetric_encryption.decrypt(ip_port_association[address][1], message)
-
-                        split_decrypted_message = decrypted_message.split()
-
-                        print split_decrypted_message
-
-                        # Check if message is a list
-                        if len(split_decrypted_message) == 3 and split_decrypted_message[0] == LIST_MESSAGE:
-                            list_random_number = split_decrypted_message[1]
-                            try:
-                                timestamp = float(split_decrypted_message[2])
-                                if is_timestamp_valid(timestamp):
-                                    server_socket.sendto(
-                                        make_current_users_message(ip_port_association[address][1], list_random_number),
-                                        address)
-                                else:
-                                    print "Timestamp invalid DEBUG"
-                            except Exception, exc:
-                                print exc
-                        else:
-                            server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command",
-                                                 address)
-                    else:
-                        server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command",
-                                             address)
+                    server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
             else:
                 server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
-                # elif message[0] == LIST_MESSAGE:
-                #     server_socket.sendto(make_current_users_message(), address)
-                # elif message[0] == GET_ADDRESS_OF_USER:
-                #     server_socket.sendto(make_get_address_of_user_response(message[1]), address)
-                # else:
-                #     server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
     except socket.error, exc:  # If address is already in use it will throw this exception
         print exc.strerror
     except Exception, exc:
@@ -165,12 +138,58 @@ def handle_puzzle_response(message, address):
 
                 shared_key = shared_key.decode("hex")
                 # Put shared key in dictionary
-                ip_port_association[address] = [True, shared_key]
-
+                ip_port_association[address] = [True, shared_key, username]
+                current_users[username] = address
                 server_socket.sendto(str(random_number) + ',' + str(server_contribution), address)
             else:
                 server_socket.sendto(make_invalid_user_password_response(), address)
 
+
+def handle_symmetric_encrypted_data(address,message):
+    # Message is encrypted and client already set shared key
+    decrypted_message = symmetric_encryption.decrypt(ip_port_association[address][1], message)
+    split_decrypted_message = decrypted_message.split()
+
+    if len(split_decrypted_message) == 3 and split_decrypted_message[0] == LIST_MESSAGE:  # Check if message is a list
+        handle_list_message(split_decrypted_message, address)
+    elif split_decrypted_message[0] == LOGOUT_MESSAGE and len(split_decrypted_message) == 2:
+        handle_logout(split_decrypted_message, address)
+    elif 0:  # send
+        pass
+    else:
+        pass  # we will see
+
+
+def handle_list_message(split_decrypted_message, address):
+    list_random_number = split_decrypted_message[1]
+    try:
+        timestamp = float(split_decrypted_message[2])
+        if is_timestamp_valid(timestamp):
+            server_socket.sendto(make_current_users_message(ip_port_association[address][1], list_random_number),address)
+        else:
+            print "Timestamp invalid DEBUG"
+    except Exception, exc:
+        print 'exception: ', exc
+
+
+def handle_logout(split_decrypted_message,address):
+    try:
+        timestamp = float(split_decrypted_message[1])
+        if is_timestamp_valid(timestamp):
+            server_socket.sendto(make_user_logout_message(ip_port_association[address][1]), address)
+            status, shared_key, username = ip_port_association[address]
+            del current_users[username]
+            del ip_port_association[address]
+        else:
+            print "Timestamp invalid DEBUG"
+    except Exception, exc:
+        print exc
+
+
+def make_user_logout_message(shared_key):
+    payload = LOGOUT_MESSAGE
+    associated_data = os.urandom(16)
+    return symmetric_encryption.encrypt(shared_key, payload, associated_data)
 
 def control_incoming_request():
     """

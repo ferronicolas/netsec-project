@@ -1,4 +1,4 @@
-import socket, threading, json, os, binascii, getpass, base64
+import socket, threading, json, os, binascii, getpass
 import PoW, Diffie_hellman, symmetric_encryption
 from errno import ENOENT
 from file_handler import read_server_file
@@ -21,6 +21,8 @@ GET_ADDRESS_OF_USER_RESPONSE = "get_address_of_user_response"
 ILLEGAL_MESSAGE_RESPONSE = "illegal"
 SEND = "send"
 INCORRECT_USER_PASS_MESSAGE = "incorrect_user_pass"
+LOGOUT_MESSAGE = 'logout'
+
 
 # Exception messages
 INVALID_IP_EXCEPTION = "The IP address of the server is invalid"
@@ -189,6 +191,8 @@ def listen_on_port():
                         if len(split_decrypted_message) > 2 and split_decrypted_message[0] == LIST_RESPONSE_MESSAGE:
                             if list_random_number == split_decrypted_message[1]:  # Valid response!
                                 print ' '.join(split_decrypted_message[2:])
+                        elif split_decrypted_message[0] == LOGOUT_MESSAGE:
+                            exit(0)
                         elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
                             json_response = json.loads(''.join(data_split[1:]))
                             client_socket.sendto(my_username + " " + current_message, (json_response["ip"], json_response["port"]))
@@ -227,6 +231,8 @@ def input_handling():
                     print "You are not using the command 'send' the proper way"
             elif split_message[0] == LIST_MESSAGE:
                 client_socket.sendto(make_list_message(), (server_ip, server_port))
+            elif split_message[0] == LOGOUT_MESSAGE:
+                client_socket.sendto(make_logout_message(), (server_ip, server_port))
             else:
                 client_socket.sendto(message, (server_ip, server_port))
         else:
@@ -284,6 +290,13 @@ def make_list_message():
     message = LIST_MESSAGE + " " + list_random_number + " " + str(get_current_timestamp())
     message_to_send = symmetric_encryption.encrypt(shared_key, message, associated_data)
     return message_to_send
+
+
+def make_logout_message():
+    payload = LOGOUT_MESSAGE + " " + str(get_current_timestamp())
+    associated_data = os.urandom(16)
+    payload = symmetric_encryption.encrypt(shared_key, payload, associated_data)
+    return payload
 
 
 if __name__ == "__main__":
