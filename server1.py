@@ -1,7 +1,8 @@
-import socket, argparse, math, threading
-import PoW, incoming_control, Diffie_hellman,saltpassword, userdatabase,check_data_format
+import socket, argparse, math, threading, os
+import PoW, incoming_control, Diffie_hellman, saltpassword, userdatabase, check_data_format, symmetric_encryption
 from file_handler import create_server_file
 import netifaces as ni
+from time_handler import get_expiration_of_puzzle, is_timestamp_valid
 
 # Flags
 PORT_FLAG = "-sp"
@@ -13,7 +14,7 @@ LIST_RESPONSE_MESSAGE = "list_response"
 GET_ADDRESS_OF_USER = "get_address_of_user"
 GET_ADDRESS_OF_USER_RESPONSE = "get_address_of_user_response"
 ILLEGAL_MESSAGE_RESPONSE = "illegal"
-PUZZLE_MESSAGE = 'puzzle'
+PUZZLE_RESPONSE = 'puzzle'
 
 # Error messages
 ERROR_MUST_ENTER_POSITIVE = "You must enter a positive number"
@@ -25,12 +26,9 @@ PRIVATE_KEY_FULL_PATH = "private_key_4096.der"
 
 # Global variables
 current_users = {}
+ip_port_association = {}
 server_socket = None
 pow_length = 3
-
-# Hardcoded values
-server_private_key = "path/to/private/key"
-server_public_key = "path/to/public/key"
 
 # Threads
 threads = []
@@ -87,16 +85,42 @@ def listen_on_port(port):
             if len(message) > 0:
                 if message[0] == SIGN_IN_MESSAGE:
                     handle_sign_in(address)
-                elif message[0] == LIST_MESSAGE:
-                    server_socket.sendto(make_current_users_message(), address)
-                elif message[0] == GET_ADDRESS_OF_USER:
-                    server_socket.sendto(make_get_address_of_user_response(message[1]), address)
-                elif message[0] == PUZZLE_MESSAGE:
+                elif message[0] == PUZZLE_RESPONSE:
                     handle_puzzle_response(message, address)
                 else:
-                    server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
+                    if (address in ip_port_association) and ip_port_association[address][0] == True and \
+                            len(message) == 4:  # Message is encrypted and client already set shared key
+                        decrypted_message = symmetric_encryption.decrypt(ip_port_association[address][1], message)
+
+                        split_decrypted_message = decrypted_message.split()
+
+                        # Check if message is a list
+                        if len(split_decrypted_message) == 3 and split_decrypted_message[0] == LIST_MESSAGE:
+                            list_random_number = split_decrypted_message[1]
+                            try:
+                                timestamp = float(split_decrypted_message[2])
+                                if is_timestamp_valid(timestamp):
+                                    server_socket.sendto(
+                                        make_current_users_message(ip_port_association[address][1], list_random_number),
+                                        address)
+                                else:
+                                    print "Timestamp invalid DEBUG"
+                            except Exception, exc:
+                                print exc
+                    else:
+                        print "GETS HERER!!! DEBUG"
+            else:
+                server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
+                # elif message[0] == LIST_MESSAGE:
+                #     server_socket.sendto(make_current_users_message(), address)
+                # elif message[0] == GET_ADDRESS_OF_USER:
+                #     server_socket.sendto(make_get_address_of_user_response(message[1]), address)
+                # else:
+                #     server_socket.sendto(ILLEGAL_MESSAGE_RESPONSE + " You just typed in an invalid command", address)
     except socket.error, exc:  # If address is already in use it will throw this exception
         print exc.strerror
+    except Exception, exc:
+        print exc
 
 
 def init_socket(port):
@@ -112,17 +136,25 @@ def handle_sign_in(address):
     global pow_length
     pow_length = incoming_control.get_pow_length(pow_length)
     r1, r2, hash_value = PoW.proof_o_work(pow_length)
+    # Add puzzle result to dictionary
+    ip_port_association[address] = [False, r2, get_expiration_of_puzzle()]  # [Logged_in, result_puzzle, expiration_puzzle]
     server_socket.sendto(str(r1) + ',' + str(hash_value), address)
-    current_users[address[0], address[1]] = r2  # addres: (IP address, port)
 
 
 def handle_puzzle_response(message, address):
-    if check_data_format.check_charset(message[1], hex_set):
-        if current_users[address[0], address[1]] == message[1]:  # check PoW
-            username, password, r1, df_contribution = message[2].split(',')
+    if len(message) == 3 and (address in ip_port_association) \
+        and ip_port_association[address][0] == False and ip_port_association[address][1] == message[1]: # Puzzle valid
+        payload = message[2].split(',')
+        if len(payload) == 4:
+            username, password, random_number, df_contribution = payload
             if saltpassword.check(userdatabase.get_salt_user(username), password, userdatabase.get_hash_user(username)):
                 shared_key, server_contribution = Diffie_hellman.server_contribution(int(df_contribution))
-                server_socket.sendto(str(r1) + ',' + str(server_contribution), address)
+
+                shared_key = shared_key.decode("hex")
+                # Put shared key in dictionary
+                ip_port_association[address] = [True, shared_key]
+
+                server_socket.sendto(str(random_number) + ',' + str(server_contribution), address)
 
 
 def control_incoming_request():
@@ -134,12 +166,16 @@ def control_incoming_request():
     incoming_control.reset()
 
 
-def make_current_users_message():
+def make_current_users_message(shared_key, list_random_number):
     usernames = current_users.keys()
     if len(usernames) == 1:
-        return LIST_RESPONSE_MESSAGE + " Signed in user: " + usernames[0]
+        message = LIST_RESPONSE_MESSAGE + " " + list_random_number + " Signed in user: " + usernames[0]
     elif len(usernames) > 1:
-        return LIST_RESPONSE_MESSAGE + " Signed in users: " + ', '.join(current_users.keys())
+        message = LIST_RESPONSE_MESSAGE + " " + list_random_number + " Signed in users: " + ', '.join(current_users.keys())
+    else:  # No users connected
+        message = LIST_RESPONSE_MESSAGE + " " + list_random_number + " There are no signed in users"
+    associated_data = os.urandom(16)
+    return symmetric_encryption.encrypt(shared_key, message, associated_data)
 
 
 def make_get_address_of_user_response(username):

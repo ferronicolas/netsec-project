@@ -1,9 +1,8 @@
-import  pyDH
+import pyDH
 
 """
-All public keys are 2048 bit.
+All contributions are 2048 bit.
 """
-
 
 def process_server_contribution(client, servers_contribution):
     """
@@ -29,7 +28,7 @@ def server_contribution(clients_contribution):
     server = pyDH.DiffieHellman()
     server_contribution = server.gen_public_key()
     shared_key = server.gen_shared_key(clients_contribution)
-    return shared_key,server_contribution
+    return shared_key, server_contribution
 
 
 def client_contribution():
@@ -41,5 +40,4 @@ def client_contribution():
     client = pyDH.DiffieHellman()
     client_contribution = client.gen_public_key()
     return client, client_contribution
-
 

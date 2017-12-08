@@ -1,5 +1,6 @@
 counter = 0
 
+
 def get_pow_length(length_proof_o_work):
     """
     Function that increases the length of the proof o work if there if the function gets called too often.
