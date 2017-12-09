@@ -3,7 +3,7 @@ import PoW, incoming_control, Diffie_hellman, saltpassword, userdatabase, check_
 from file_handler import create_server_file
 import netifaces as ni
 from time_handler import get_expiration_of_puzzle, is_timestamp_valid
-from asymmetric_encryption import decrypt_message
+from asymmetric_encryption import decrypt_message, sign_message
 
 # Flags
 PORT_FLAG = "-sp"
@@ -23,7 +23,7 @@ LOGOUT_MESSAGE = 'logout'
 ERROR_MUST_ENTER_POSITIVE = "You must enter a positive number"
 
 # Global constants
-BUFFER_SIZE = 1024
+BUFFER_SIZE = 2048
 PRIVATE_KEY_FULL_PATH = "private_key_8192.der"
 
 # Global variables
@@ -125,11 +125,9 @@ def handle_sign_in(address):
 def handle_puzzle_response(data, message, address):
     if len(message) > 2 and (address in ip_port_association) and ip_port_association[address][0] == False \
             and ip_port_association[address][1] == message[1]:  # Puzzle valid
-        message_to_decrypt = data.split(message[0] + " " + message[1] + " ", 1)[1]
-        print message_to_decrypt
-        print "ENCRYTPED MESSAGE: " + message_to_decrypt
+        split_data = data.split(message[0] + " " + message[1] + " ", 1)
+        message_to_decrypt = split_data[1]
         message_decrypted = decrypt_message(PRIVATE_KEY_FULL_PATH, message_to_decrypt)
-        print "DECRYPTED MESSAGE: " + message_decrypted
         payload = message_decrypted.split(',')
         if len(payload) == 4:
             username, password, random_number, df_contribution = payload
@@ -143,7 +141,8 @@ def handle_puzzle_response(data, message, address):
                 # Put shared key in dictionary
                 ip_port_association[address] = [True, shared_key, username]
                 current_users[username] = address
-                server_socket.sendto(str(random_number) + ',' + str(server_contribution), address)
+
+                server_socket.sendto(make_puzzle_response(random_number, server_contribution), address)
             else:
                 server_socket.sendto(make_invalid_user_password_response(), address)
 
@@ -175,7 +174,7 @@ def handle_list_message(split_decrypted_message, address):
         print 'exception: ', exc
 
 
-def handle_logout(split_decrypted_message,address):
+def handle_logout(split_decrypted_message, address):
     try:
         timestamp = float(split_decrypted_message[1])
         if is_timestamp_valid(timestamp):
@@ -193,6 +192,7 @@ def make_user_logout_message(shared_key):
     payload = LOGOUT_MESSAGE
     associated_data = os.urandom(16)
     return symmetric_encryption.encrypt(shared_key, payload, associated_data)
+
 
 def control_incoming_request():
     """
@@ -213,6 +213,11 @@ def make_current_users_message(shared_key, list_random_number):
         message = LIST_RESPONSE_MESSAGE + " " + list_random_number + " There are no signed in users"
     associated_data = os.urandom(16)
     return symmetric_encryption.encrypt(shared_key, message, associated_data)
+
+
+def make_puzzle_response(random_number, server_contribution):
+    message = str(random_number) + ',' + str(server_contribution)
+    return message + "---" + sign_message(PRIVATE_KEY_FULL_PATH, message)
 
 
 def make_get_address_of_user_response(username):

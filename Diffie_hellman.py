@@ -13,9 +13,6 @@ def process_server_contribution(client, servers_contribution):
     :return: shared_key
     """
     shared_key = client.gen_shared_key(servers_contribution)
-    print shared_key
-    print 'keylength: ', len(shared_key)
-    print len(bytearray.fromhex(str(shared_key)))
     return shared_key
 
 

@@ -1,10 +1,10 @@
-import socket, threading, json, os, binascii, getpass, base64
+import socket, threading, json, os, binascii, getpass
 import PoW, Diffie_hellman, symmetric_encryption
 from errno import ENOENT
 from file_handler import read_server_file
 from excep import InvalidIPAddressError, InvalidPortError
 from time_handler import get_current_timestamp
-from asymmetric_encryption import encrypt_message
+from asymmetric_encryption import encrypt_message, verify_signature
 
 # Flags
 USER_FLAG = "-u"
@@ -29,6 +29,8 @@ INVALID_IP_EXCEPTION = "The IP address of the server is invalid"
 INVALID_PORT_EXCEPTION = "The port number of the server is invalid"
 SERVER_DOWN = "The server is down"
 FILE_DOESNT_EXIST = "The server hasn't created the configuration file yet"
+DATA_COULDNT_BE_VERIFIED = "Data couldn't be verified. Someone other than the server is trying to communicate with you"
+
 
 # Global constants
 WAIT_FOR_SERVER = "Connecting to server..."
@@ -38,7 +40,7 @@ ENTER_PASSWORD = "Enter your password: "
 PASSWORD_CANT_BE_BLANK = "Password can't be blank. Enter it again: "
 DO_YOU_WANNA_TRY_AGAIN = "Do you wanna try again? (Y/N) "
 SHARED_KEY_COULDNT_BE_ESTABLISHED = "Shared key couldn't be established"
-BUFFER_SIZE = 1024
+BUFFER_SIZE = 2048
 SERVER_PUBLIC_KEY_FULL_PATH = "public_key_8192.der"
 
 # Global variables
@@ -153,62 +155,79 @@ def listen_on_port():
         c_key = str(client_pubkey)
 
         message_to_send = make_puzzle_message(r2, my_username, my_password, puzzle_random_number, c_key)
-        print message_to_send
         client_socket.sendto(message_to_send, (server_ip, server_port))
         data, address = client_socket.recvfrom(BUFFER_SIZE)
 
         response_split = data.split()
         if len(response_split) > 1 and response_split[0] == INCORRECT_USER_PASS_MESSAGE:
             print ' '.join(response_split[1:])
-            while True:
+            keep_going = True
+            while keep_going:
                 try_again = raw_input(DO_YOU_WANNA_TRY_AGAIN)
                 if try_again == "Y" or try_again == "y" or try_again == "yes" or try_again == "YES":
-                    listen_on_port()
+                    keep_going = False
                 elif try_again == "N" or try_again == "n" or try_again == "no" or try_again == "NO":
                     exit(0)
+            listen_on_port()
+        else:
+            split_data = data.split("---", 1)
+            if len(split_data) == 2:
+                data_verified = verify_signature(SERVER_PUBLIC_KEY_FULL_PATH, split_data[1], split_data[0])
 
-        response = data.split(',')
-        if len(response) == 2:
-            random_answer, server_contribution = response
-            if puzzle_random_number == random_answer:
-                global shared_key
-                shared_key = Diffie_hellman.process_server_contribution(client, int(server_contribution))
-                print 'shared_key:', shared_key
-                shared_key = shared_key.decode("hex")
+                # Signature is valid
+                if data_verified:
 
-                global shared_key_set
-                shared_key_set = True
-                start_input_thread()
+                    response = split_data[0].split(',')
+                    if len(response) == 2:
+                        random_answer, server_contribution = response
+                        #print random_answer
+                        #print puzzle_random_number
+                        if puzzle_random_number == random_answer:
+                            global shared_key
+                            shared_key = Diffie_hellman.process_server_contribution(client, int(server_contribution))
+                            #print 'shared_key:', shared_key
+                            shared_key = shared_key.decode("hex")
 
-            if shared_key_set:
+                            global shared_key_set
+                            shared_key_set = True
+                            start_input_thread()
 
-                while True:
-                    data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
-                    data_split = data.split()
-                    if shared_key_set and len(data_split) == 4:
-                        # if data_split[0] == LIST_RESPONSE_MESSAGE:
-                        #     print ' '.join(data_split[1:])
-                        decrypted_message = symmetric_encryption.decrypt(shared_key, data_split)
-                        split_decrypted_message = decrypted_message.split()
-                        if len(split_decrypted_message) > 2 and split_decrypted_message[0] == LIST_RESPONSE_MESSAGE:
-                            if list_random_number == split_decrypted_message[1]:  # Valid response!
-                                print ' '.join(split_decrypted_message[2:])
-                        elif split_decrypted_message[0] == LOGOUT_MESSAGE:
-                            exit(0)
-                        elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
-                            json_response = json.loads(''.join(data_split[1:]))
-                            client_socket.sendto(my_username + " " + current_message, (json_response["ip"], json_response["port"]))
-                        elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
-                            print ' '.join(data_split[1:])
+                        if shared_key_set:
+                            while True:
+                                data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
+                                data_split = data.split()
+                                if shared_key_set and len(data_split) == 4:
+                                    # if data_split[0] == LIST_RESPONSE_MESSAGE:
+                                    #     print ' '.join(data_split[1:])
+                                    decrypted_message = symmetric_encryption.decrypt(shared_key, data_split)
+                                    split_decrypted_message = decrypted_message.split()
+                                    if len(split_decrypted_message) > 2 and split_decrypted_message[
+                                        0] == LIST_RESPONSE_MESSAGE:
+                                        if list_random_number == split_decrypted_message[1]:  # Valid response!
+                                            print ' '.join(split_decrypted_message[2:])
+                                    elif split_decrypted_message[0] == LOGOUT_MESSAGE:
+                                        os._exit(0)
+                                    elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
+                                        json_response = json.loads(''.join(data_split[1:]))
+                                        client_socket.sendto(my_username + " " + current_message,
+                                                             (json_response["ip"], json_response["port"]))
+                                    elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
+                                        print ' '.join(data_split[1:])
+                                    else:
+                                        print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(
+                                            data_split[0]) + ">: " \
+                                              + ' '.join(data_split[1:])
+                                elif len(data_split) > 1 and data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
+                                    print " ".join(data_split[1:])
+
                         else:
-                            print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(data_split[0]) + ">: " \
-                                  + ' '.join(data_split[1:])
-                    elif len(data_split) > 1 and data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
-                        print " ".join(data_split[1:])
+                            print SHARED_KEY_COULDNT_BE_ESTABLISHED
+                            exit(0)
 
+                else:
+                    print DATA_COULDNT_BE_VERIFIED
             else:
-                print SHARED_KEY_COULDNT_BE_ESTABLISHED
-                exit(0)
+                print DATA_COULDNT_BE_VERIFIED
 
 
 def start_input_thread():
@@ -238,7 +257,7 @@ def input_handling():
             else:
                 client_socket.sendto(message, (server_ip, server_port))
         else:
-            print "Incorrect command\n"
+            print "You just typed in an invalid command"
 
 
 def enter_username_password():
@@ -256,9 +275,8 @@ def make_sign_in_message():
 
 def make_puzzle_message(r2, username, password, random_number, c_key):
     message = username + "," + password + "," + random_number + "," + str(c_key)
-    # print message
-    # print len(message)
-    return PUZZLE_RESPONSE + " " + r2 + " " + encrypt_message(SERVER_PUBLIC_KEY_FULL_PATH, message)
+    encrypted_message = bytes(encrypt_message(SERVER_PUBLIC_KEY_FULL_PATH, message))
+    return PUZZLE_RESPONSE + " " + r2 + " " + encrypted_message
 
 
 def merge_numbers(number):
