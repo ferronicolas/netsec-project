@@ -230,13 +230,6 @@ def manage_package_arrival():
             elif split_decrypted_message[0] == USER_REQUEST_RESPONSE:
                 if len(split_decrypted_message) > 4:
 
-                    # print "RANDOM"
-                    # print send_random_number
-                    #
-                    # print len(split_decrypted_message[4])
-                    # print len(send_random_number)
-                    # print split_decrypted_message[4]
-                    # print send_random_number
 
                     # if str(split_decrypted_message[4]) == str(send_random_number):
                     address = split_decrypted_message[1], int(split_decrypted_message[2])
@@ -258,10 +251,6 @@ def manage_package_arrival():
                     ip_port_association[address_A, port_A] = (key, username_A)
                     # print "Send we are connected mge!"
                     client_socket.sendto(make_we_are_connected_message(key), (address_A, port_A))
-            elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
-                json_response = json.loads(''.join(data_split[1:]))
-                client_socket.sendto(my_username + " " + current_message,
-                                     (json_response["ip"], json_response["port"]))
             elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
                 print ' '.join(data_split[1:])
             elif address in ip_port_association:
@@ -307,13 +296,6 @@ def input_handling():
         message = raw_input()
         split_message = message.split()
         if len(split_message) > 0:
-            # if split_message[0] == SEND:
-            #     if len(split_message) > 2:
-            #         global current_message
-            #         current_message = ' '.join(split_message[2:])
-            #         client_socket.sendto(GET_ADDRESS_OF_USER + " " + split_message[1], (server_ip, server_port))
-            #     else:
-            #         print "You are not using the command 'send' the proper way"
             if split_message[0] == SEND_MESSAGE:
                 if len(split_message) > 2:
                     global current_message
@@ -378,19 +360,6 @@ def merge_numbers(number):
             final_number += format(int(number[i]) + int(number[i+1]), 'x')
     return final_number
 
-
-# def to_bytes(number):
-#     final_number = ""
-#     for i in range(0, len(number), 2):
-#         if i == len(number) - 1:
-#             result = format(int(number[i]), '04b')
-#             final_number += str(int(result, 2))
-#         else:
-#             result = str(format(int(number[i]), '04b')) + str(format(int(number[i+1]), '04b'))
-#             print result
-#             final_number += str(int(result, 2))
-#             print str(int(result, 2))
-#     return final_number
 
 def make_user_request_to_server_message(username):
     global send_random_number
