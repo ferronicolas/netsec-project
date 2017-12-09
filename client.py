@@ -20,9 +20,12 @@ GET_ADDRESS_OF_USER = "get_address_of_user"
 PUZZLE_RESPONSE = 'puzzle'
 GET_ADDRESS_OF_USER_RESPONSE = "get_address_of_user_response"
 ILLEGAL_MESSAGE_RESPONSE = "illegal"
-SEND = "send"
+SEND_MESSAGE = "send"
 INCORRECT_USER_PASS_MESSAGE = "incorrect_user_pass"
 LOGOUT_MESSAGE = 'logout'
+USER_REQUEST_RESPONSE = 'sendback'
+CLIENT_TO_CLIENT = 'client_to_client'
+WE_ARE_CONNECTED_MGE = 'we_are_connected'
 
 
 # Exception messages
@@ -55,6 +58,10 @@ shared_key = 0
 shared_key_set = False
 list_random_number = 0
 puzzle_random_number = 0
+send_random_number = 0
+friends = {}
+last_friend_request = ""  # Username of the last person requested
+ip_port_association = {}
 
 
 def start_client():
@@ -210,24 +217,73 @@ def set_shared_key(client, server_contribution):
 def manage_package_arrival():
     data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
     data_split = data.split()
-    if len(data_split) == 4:
+    # print "MESSAGE " + data
+    if len(data_split) == 4 or ((address[0] != server_ip or address[1] != server_port) and address not in ip_port_association):
         decrypted_message = symmetric_encryption.decrypt(shared_key, data_split)
-        split_decrypted_message = decrypted_message.split()
-        if len(split_decrypted_message) > 2 and split_decrypted_message[0] == LIST_RESPONSE_MESSAGE:
-            if list_random_number == split_decrypted_message[1]:  # Valid response!
-                print ' '.join(split_decrypted_message[2:])
-        elif split_decrypted_message[0] == LOGOUT_MESSAGE:
-            os._exit(0)
-        elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
-            json_response = json.loads(''.join(data_split[1:]))
-            client_socket.sendto(my_username + " " + current_message,
-                                 (json_response["ip"], json_response["port"]))
-        elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
-            print ' '.join(data_split[1:])
+        if decrypted_message:
+            split_decrypted_message = decrypted_message.split()
+            if len(split_decrypted_message) > 2 and split_decrypted_message[0] == LIST_RESPONSE_MESSAGE:
+                if list_random_number == split_decrypted_message[1]:  # Valid response!
+                    print ' '.join(split_decrypted_message[2:])
+            elif split_decrypted_message[0] == LOGOUT_MESSAGE:
+                os._exit(0)
+            elif split_decrypted_message[0] == USER_REQUEST_RESPONSE:
+                if len(split_decrypted_message) > 4:
+
+                    # print "RANDOM"
+                    # print send_random_number
+                    #
+                    # print len(split_decrypted_message[4])
+                    # print len(send_random_number)
+                    # print split_decrypted_message[4]
+                    # print send_random_number
+
+                    # if str(split_decrypted_message[4]) == str(send_random_number):
+                    address = split_decrypted_message[1], int(split_decrypted_message[2])
+                    symm_key = split_decrypted_message[3]
+                    payload_to_B = " ".join(split_decrypted_message[5:])
+                    friends[last_friend_request] = (symm_key, split_decrypted_message[1], int(split_decrypted_message[2]))
+                    ip_port_association[address] = (symm_key, last_friend_request)
+                    client_socket.sendto(payload_to_B, address)
+                    # else:
+                    #     print "Response from server wasn't valid (R1 invalid)"
+            elif split_decrypted_message[0] == CLIENT_TO_CLIENT:
+                if len(split_decrypted_message) > 4:
+                    # print split_decrypted_message
+                    key = split_decrypted_message[1]
+                    username_A = split_decrypted_message[2]
+                    address_A = split_decrypted_message[3]
+                    port_A = int(split_decrypted_message[4])
+                    friends[username_A] = (key, address_A, port_A)
+                    ip_port_association[address_A, port_A] = (key, username_A)
+                    # print "Send we are connected mge!"
+                    client_socket.sendto(make_we_are_connected_message(key), (address_A, port_A))
+            elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
+                json_response = json.loads(''.join(data_split[1:]))
+                client_socket.sendto(my_username + " " + current_message,
+                                     (json_response["ip"], json_response["port"]))
+            elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
+                print ' '.join(data_split[1:])
+            elif address in ip_port_association:
+                decrypted_message = symmetric_encryption.decrypt(ip_port_association[address][0], data_split)
+                if decrypted_message:
+                    decrypted_message_split = decrypted_message.split()
+                    if decrypted_message_split[0] == WE_ARE_CONNECTED_MGE:
+                        client_socket.sendto(make_send_message(ip_port_association[address][1], ip_port_association[address][0]), address)
+                    else:
+                        print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(
+                            data_split[0]) + ">: " + ' '.join(decrypted_message_split[1:])
         else:
-            print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(
-                data_split[0]) + ">: " \
-                  + ' '.join(data_split[1:])
+            if address in ip_port_association:
+                decrypted_message = symmetric_encryption.decrypt(ip_port_association[address][0], data_split)
+                if decrypted_message:
+                    decrypted_message_split = decrypted_message.split()
+                    if decrypted_message_split[0] == WE_ARE_CONNECTED_MGE:
+                        client_socket.sendto(make_send_message(ip_port_association[address][1], ip_port_association[address][0]), address)
+                    else:
+                        print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(
+                            ip_port_association[address][1]) + ">: " + ''.join(decrypted_message_split[1:])
+
     elif len(data_split) > 1 and data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
         print " ".join(data_split[1:])
 
@@ -251,11 +307,23 @@ def input_handling():
         message = raw_input()
         split_message = message.split()
         if len(split_message) > 0:
-            if split_message[0] == SEND:
+            # if split_message[0] == SEND:
+            #     if len(split_message) > 2:
+            #         global current_message
+            #         current_message = ' '.join(split_message[2:])
+            #         client_socket.sendto(GET_ADDRESS_OF_USER + " " + split_message[1], (server_ip, server_port))
+            #     else:
+            #         print "You are not using the command 'send' the proper way"
+            if split_message[0] == SEND_MESSAGE:
                 if len(split_message) > 2:
                     global current_message
                     current_message = ' '.join(split_message[2:])
-                    client_socket.sendto(GET_ADDRESS_OF_USER + " " + split_message[1], (server_ip, server_port))
+                    if split_message[1] in friends:
+                         username = split_message[1]
+                         client_socket.sendto(symmetric_encryption.encrypt(shared_key, message, os.urandom(16)), (friends[username][1], friends[username][2]))
+                    else:
+                         client_socket.sendto(make_user_request_to_server_message(split_message[1]),
+                                         (server_ip, server_port))
                 else:
                     print "You are not using the command 'send' the proper way"
             elif split_message[0] == LIST_MESSAGE:
@@ -275,6 +343,20 @@ def enter_username_password():
         my_username = raw_input(USERNAME_CANT_BE_BLANK)
     my_password = getpass.getpass()
     return my_username, my_password
+
+
+def make_we_are_connected_message(key):
+    payload = WE_ARE_CONNECTED_MGE
+    associated_data = os.urandom(16)
+    payload = symmetric_encryption.encrypt(key, payload, associated_data)
+    return payload
+
+
+def make_send_message(username, key):
+    payload = SEND_MESSAGE + " " + username + " " + current_message
+    associated_data = "1234567890123456"  # os.urandom(16)
+    payload = symmetric_encryption.encrypt(key, payload, associated_data)
+    return payload
 
 
 def make_sign_in_message():
@@ -309,6 +391,14 @@ def merge_numbers(number):
 #             final_number += str(int(result, 2))
 #             print str(int(result, 2))
 #     return final_number
+
+def make_user_request_to_server_message(username):
+    global send_random_number
+    send_random_number = binascii.hexlify(os.urandom(16)).strip(" \r\t\n")
+    payload = SEND_MESSAGE + " " + username + " " + str(send_random_number) + " " + str(get_current_timestamp())
+    associated_data = os.urandom(16)
+    payload = symmetric_encryption.encrypt(shared_key, payload, associated_data)
+    return payload
 
 
 def make_list_message():

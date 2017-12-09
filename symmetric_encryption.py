@@ -35,7 +35,7 @@ def decrypt_message_symmetric_key(key, associated_data, iv, ciphertext, tag):
         decryptor.authenticate_additional_data(associated_data)
         return decryptor.update(ciphertext) + decryptor.finalize()
     except InvalidTag:
-        print "Invalid tag"
+        # print "Invalid tag exception"
         return None
 
 

@@ -1,4 +1,4 @@
-import socket, argparse, math, threading, os, base64
+import socket, argparse, threading, os, binascii
 import PoW, incoming_control, Diffie_hellman, saltpassword, userdatabase, symmetric_encryption
 from file_handler import create_server_file
 import netifaces as ni
@@ -18,6 +18,9 @@ ILLEGAL_MESSAGE_RESPONSE = "illegal"
 PUZZLE_MESSAGE = 'puzzle'
 INCORRECT_USER_PASS_MESSAGE = "incorrect_user_pass"
 LOGOUT_MESSAGE = 'logout'
+SEND_MESSAGE = 'send'
+USER_REQUEST_RESPONSE = 'sendback'
+CLIENT_TO_CLIENT = 'client_to_client'
 
 # Error messages
 ERROR_MUST_ENTER_POSITIVE = "You must enter a positive number"
@@ -147,7 +150,7 @@ def handle_puzzle_response(data, message, address):
                 server_socket.sendto(make_invalid_user_password_response(), address)
 
 
-def handle_symmetric_encrypted_data(address,message):
+def handle_symmetric_encrypted_data(address, message):
     # Message is encrypted and client already set shared key
     decrypted_message = symmetric_encryption.decrypt(ip_port_association[address][1], message)
     split_decrypted_message = decrypted_message.split()
@@ -156,10 +159,42 @@ def handle_symmetric_encrypted_data(address,message):
         handle_list_message(split_decrypted_message, address)
     elif split_decrypted_message[0] == LOGOUT_MESSAGE and len(split_decrypted_message) == 2:
         handle_logout(split_decrypted_message, address)
-    elif 0:  # send
-        pass
+    elif split_decrypted_message[0] == SEND_MESSAGE:  # send
+        handle_user_to_user_request(split_decrypted_message, address)
     else:
         pass  # we will see
+
+
+def handle_user_to_user_request(split_decrypted_message, address):
+    # A = requester, B requested, S Server
+    if len(split_decrypted_message) > 3:
+        username_B = split_decrypted_message[1]
+        try:
+            timestamp = float(split_decrypted_message[3])
+            if is_timestamp_valid(timestamp):
+                if username_B in current_users:  # If user is logged in
+                    ip_B, port_B = current_users[username_B]
+                    _, key_BS, _ = ip_port_association[ip_B, port_B]
+                    rand = split_decrypted_message[2]
+
+                    symmetric_key_AB = os.urandom(32)
+
+                    _, shared_key, userA = ip_port_association[address]
+                    message_to_be = CLIENT_TO_CLIENT + " " + str(symmetric_key_AB) + " " + userA + " " + str(
+                        address[0]) + " " + str(address[1])
+                    associated_data = os.urandom(16)
+                    part_B = symmetric_encryption.encrypt(key_BS, message_to_be, associated_data)
+
+                    payload = USER_REQUEST_RESPONSE + " " + str(ip_B) + " " + str(port_B) + " " + str(
+                        symmetric_key_AB) + " " + str(rand) + " " + str(part_B)
+
+                    associated_data2 = os.urandom(16)
+                    encrypted = symmetric_encryption.encrypt(shared_key, payload, associated_data2)
+                    server_socket.sendto(encrypted, address)
+            else:
+                print "Timestamp invalid DEBUG"
+        except Exception, exc:
+            print 'exception: ', exc
 
 
 def handle_list_message(split_decrypted_message, address):
