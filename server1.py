@@ -1,5 +1,5 @@
 import socket, argparse, math, threading, os, base64
-import PoW, incoming_control, Diffie_hellman, saltpassword, userdatabase, check_data_format, symmetric_encryption
+import PoW, incoming_control, Diffie_hellman, saltpassword, userdatabase, symmetric_encryption
 from file_handler import create_server_file
 import netifaces as ni
 from time_handler import get_expiration_of_puzzle, is_timestamp_valid

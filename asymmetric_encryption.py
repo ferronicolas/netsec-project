@@ -82,7 +82,7 @@ def verify_signature(public_key_filename, signature, message_to_verify_signature
 #     print message
 #     print len(message)
 #     print "Identical: " + str(message == MESSAGE)
-    # signature = sign_message("private_key_4096.der", MESSAGE)
-    # result = verify_signature("public_key_4096.der", signature, MESSAGE)
+    # signature = sign_message("private_key_8192.der", MESSAGE)
+    # result = verify_signature("public_key_8192.der", signature, MESSAGE)
     # print result
 

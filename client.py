@@ -63,11 +63,8 @@ def start_client():
         server_ip, server_port = read_server_file()
         server_ip = check_if_ipv4(server_ip)
         server_port = check_if_valid_port(server_port)
-        if check_if_server_up():
-            print WAIT_FOR_SERVER
-            start_socket_thread()
-        else:
-            print SERVER_DOWN
+        print WAIT_FOR_SERVER
+        start_socket_thread()
     except InvalidIPAddressError as error:
         print error.message
         exit(1)
@@ -81,10 +78,6 @@ def start_client():
         else:
             print e.strerror
             exit(1)
-
-
-def check_if_server_up():
-    return True
 
 
 # Checks if IP supplied is a valid IPv4
@@ -159,15 +152,9 @@ def listen_on_port():
 
         response_split = data.split()
         if len(response_split) > 1 and response_split[0] == INCORRECT_USER_PASS_MESSAGE:
-            print ' '.join(response_split[1:])
-            keep_going = True
-            while keep_going:
-                try_again = raw_input(DO_YOU_WANNA_TRY_AGAIN)
-                if try_again == "Y" or try_again == "y" or try_again == "yes" or try_again == "YES":
-                    keep_going = False
-                elif try_again == "N" or try_again == "n" or try_again == "no" or try_again == "NO":
-                    exit(0)
-            listen_on_port()
+
+            handle_incorrect_user_password(response_split)
+
         else:
             split_data = data.split("---", 1)
             if len(split_data) == 2:
@@ -181,11 +168,10 @@ def listen_on_port():
                         random_answer, server_contribution = response
 
                         if puzzle_random_number == random_answer:
-                            global shared_key, shared_key_set
-                            shared_key = Diffie_hellman.process_server_contribution(client, int(server_contribution))
-                            shared_key = shared_key.decode("hex")
 
-                            shared_key_set = True
+                            # Set shared key variable
+                            set_shared_key(client, server_contribution)
+                            # Let user type in commands
                             start_input_thread()
 
                         if shared_key_set:
@@ -201,12 +187,30 @@ def listen_on_port():
                 print DATA_COULDNT_BE_VERIFIED
 
 
+def handle_incorrect_user_password(response_split):
+    print ' '.join(response_split[1:])
+    keep_going = True
+    while keep_going:
+        try_again = raw_input(DO_YOU_WANNA_TRY_AGAIN)
+        if try_again == "Y" or try_again == "y" or try_again == "yes" or try_again == "YES":
+            keep_going = False
+        elif try_again == "N" or try_again == "n" or try_again == "no" or try_again == "NO":
+            exit(0)
+    listen_on_port()
+
+
+def set_shared_key(client, server_contribution):
+    global shared_key, shared_key_set
+    shared_key = Diffie_hellman.process_server_contribution(client, int(server_contribution))
+    shared_key = shared_key.decode("hex")
+
+    shared_key_set = True
+
+
 def manage_package_arrival():
     data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
     data_split = data.split()
     if len(data_split) == 4:
-        # if data_split[0] == LIST_RESPONSE_MESSAGE:
-        #     print ' '.join(data_split[1:])
         decrypted_message = symmetric_encryption.decrypt(shared_key, data_split)
         split_decrypted_message = decrypted_message.split()
         if len(split_decrypted_message) > 2 and split_decrypted_message[0] == LIST_RESPONSE_MESSAGE:
