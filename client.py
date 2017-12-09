@@ -5,6 +5,7 @@ from file_handler import read_server_file
 from excep import InvalidIPAddressError, InvalidPortError
 from time_handler import get_current_timestamp
 from asymmetric_encryption import encrypt_message, verify_signature
+import subprocess as sp
 
 # Flags
 USER_FLAG = "-u"
@@ -63,10 +64,6 @@ def start_client():
         server_ip = check_if_ipv4(server_ip)
         server_port = check_if_valid_port(server_port)
         if check_if_server_up():
-            # my_username = raw_input(ENTER_USERNAME)
-            # my_password = raw_input(ENTER_PASSWORD)
-            # if my_username:  # Checks if it got arguments
-            # start_input_thread()
             print WAIT_FOR_SERVER
             start_socket_thread()
         else:
@@ -143,6 +140,7 @@ def listen_on_port():
     data, address = client_socket.recvfrom(BUFFER_SIZE)
     r1_hash = data.split(',')
     if len(r1_hash) == 2:
+
         r1 = r1_hash[0]
         hash = r1_hash[1]
         r2 = PoW.compute_r2(r1, hash)
@@ -151,6 +149,7 @@ def listen_on_port():
         global my_username
         my_username, my_password = enter_username_password()
 
+        global puzzle_random_number
         puzzle_random_number = binascii.hexlify(os.urandom(16))  # Generate random number
         c_key = str(client_pubkey)
 
@@ -180,46 +179,18 @@ def listen_on_port():
                     response = split_data[0].split(',')
                     if len(response) == 2:
                         random_answer, server_contribution = response
-                        #print random_answer
-                        #print puzzle_random_number
+
                         if puzzle_random_number == random_answer:
-                            global shared_key
+                            global shared_key, shared_key_set
                             shared_key = Diffie_hellman.process_server_contribution(client, int(server_contribution))
-                            #print 'shared_key:', shared_key
                             shared_key = shared_key.decode("hex")
 
-                            global shared_key_set
                             shared_key_set = True
                             start_input_thread()
 
                         if shared_key_set:
                             while True:
-                                data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
-                                data_split = data.split()
-                                if shared_key_set and len(data_split) == 4:
-                                    # if data_split[0] == LIST_RESPONSE_MESSAGE:
-                                    #     print ' '.join(data_split[1:])
-                                    decrypted_message = symmetric_encryption.decrypt(shared_key, data_split)
-                                    split_decrypted_message = decrypted_message.split()
-                                    if len(split_decrypted_message) > 2 and split_decrypted_message[
-                                        0] == LIST_RESPONSE_MESSAGE:
-                                        if list_random_number == split_decrypted_message[1]:  # Valid response!
-                                            print ' '.join(split_decrypted_message[2:])
-                                    elif split_decrypted_message[0] == LOGOUT_MESSAGE:
-                                        os._exit(0)
-                                    elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
-                                        json_response = json.loads(''.join(data_split[1:]))
-                                        client_socket.sendto(my_username + " " + current_message,
-                                                             (json_response["ip"], json_response["port"]))
-                                    elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
-                                        print ' '.join(data_split[1:])
-                                    else:
-                                        print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(
-                                            data_split[0]) + ">: " \
-                                              + ' '.join(data_split[1:])
-                                elif len(data_split) > 1 and data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
-                                    print " ".join(data_split[1:])
-
+                                manage_package_arrival()
                         else:
                             print SHARED_KEY_COULDNT_BE_ESTABLISHED
                             exit(0)
@@ -230,14 +201,47 @@ def listen_on_port():
                 print DATA_COULDNT_BE_VERIFIED
 
 
+def manage_package_arrival():
+    data, address = client_socket.recvfrom(BUFFER_SIZE)  # Buffer size = 1024 bytes
+    data_split = data.split()
+    if len(data_split) == 4:
+        # if data_split[0] == LIST_RESPONSE_MESSAGE:
+        #     print ' '.join(data_split[1:])
+        decrypted_message = symmetric_encryption.decrypt(shared_key, data_split)
+        split_decrypted_message = decrypted_message.split()
+        if len(split_decrypted_message) > 2 and split_decrypted_message[0] == LIST_RESPONSE_MESSAGE:
+            if list_random_number == split_decrypted_message[1]:  # Valid response!
+                print ' '.join(split_decrypted_message[2:])
+        elif split_decrypted_message[0] == LOGOUT_MESSAGE:
+            os._exit(0)
+        elif data_split[0] == GET_ADDRESS_OF_USER_RESPONSE:
+            json_response = json.loads(''.join(data_split[1:]))
+            client_socket.sendto(my_username + " " + current_message,
+                                 (json_response["ip"], json_response["port"]))
+        elif data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
+            print ' '.join(data_split[1:])
+        else:
+            print "<From " + str(address[0]) + ":" + str(address[1]) + ":" + str(
+                data_split[0]) + ">: " \
+                  + ' '.join(data_split[1:])
+    elif len(data_split) > 1 and data_split[0] == ILLEGAL_MESSAGE_RESPONSE:
+        print " ".join(data_split[1:])
+
+
 def start_input_thread():
     t = threading.Thread(target=input_handling)
     threads.append(t)
     t.start()
 
 
+def clear_screen():
+    sp.call('cls', shell=True)
+    sp.call('clear', shell=True)
+
+
 # Handles the input from the user
 def input_handling():
+    clear_screen()
     print "You can chat now:"
     while True:
         message = raw_input()
